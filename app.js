@@ -9,7 +9,6 @@ const privateKey = process.env.PRIVATE_KEY;
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
 
 const account = createAccount(privateKey);
-
 const activeChain = {
     ...testnetAsimov,
     rpcUrls: {
@@ -23,12 +22,18 @@ const client = createClient({
     account: account
 });
 
-// Complete, explicit ABI definition mapping to your Python contract methods
+// Updated ABI matching the new multi-parameter Python functions
 const contractAbi = [
     {
         "name": "file_dispute",
         "type": "function",
-        "inputs": [{ "name": "claim_text", "type": "string" }],
+        "inputs": [
+            { "name": "dispute_id", "type": "uint256" },
+            { "name": "order_id", "type": "string" },
+            { "name": "dispute_amount", "type": "uint256" },
+            { "name": "carrier", "type": "string" },
+            { "name": "claim_text", "type": "string" }
+        ],
         "outputs": []
     },
     {
@@ -45,51 +50,49 @@ const contractAbi = [
     }
 ];
 
-// Submits the dispute description into GenVM Storage
-export async function fileDispute(claimText) {
-    console.log(`[GenLayer RPC] Filing dispute text to storage...`);
+// Submits robust multi-parameter data context to GenVM
+export async function fileDispute(disputeId, orderId, amount, carrier, claimText) {
+    console.log(`[GenLayer RPC] Submitting structured dispute to storage...`);
     return await client.writeContract({
         address: CONTRACT_ADDRESS,
         abi: contractAbi,
         functionName: 'file_dispute',
-        args: [String(claimText)],
-        gas: 2000000n // Hardcoded gas override prevents automated eth_estimateGas reverts
+        args: [
+            `0x${BigInt(disputeId).toString(16)}`,
+            String(orderId),
+            `0x${BigInt(amount).toString(16)}`,
+            String(carrier),
+            String(claimText)
+        ],
+        gas: 2500000n
     });
 }
 
-// Triggers the validator nodes to execute the Equivalence Principle AI jury
 export async function resolveDispute(disputeId) {
     console.log(`[GenLayer RPC] Invoking resolve_dispute for ID: ${disputeId}...`);
     return await client.writeContract({
         address: CONTRACT_ADDRESS,
         abi: contractAbi,
         functionName: 'resolve_dispute',
-        args: [BigInt(disputeId)],
-        gas: 4000000n
+        args: [`0x${BigInt(disputeId).toString(16)}`],
+        gas: 4500000n
     });
 }
 
-// Reads the TreeMap state string and parses it back safely into a JavaScript Object
 export async function getDisputeStatus(disputeId) {
-    console.log(`[GenLayer RPC] Reading status for ID: ${disputeId}...`);
-    
+    console.log(`[GenLayer RPC] Reading data metrics for ID: ${disputeId}...`);
     const rawResult = await client.readContract({
         address: CONTRACT_ADDRESS,
         abi: contractAbi,
         functionName: 'get_status',
-        args: [BigInt(disputeId)]
+        args: [`0x${BigInt(disputeId).toString(16)}`]
     });
 
-    // If GenLayer already returned a structured object layout, forward it directly
-    if (typeof rawResult === 'object' && rawResult !== null) {
-        return rawResult;
-    }
+    if (typeof rawResult === 'object' && rawResult !== null) return rawResult;
 
     try {
-        // Attempt parsing only if it's a valid JSON-formatted string string
         return JSON.parse(rawResult);
     } catch (e) {
-        // Fallback: If it's a standard unformatted raw string, wrap it so the browser reads it cleanly
         return { status: rawResult };
     }
 }
