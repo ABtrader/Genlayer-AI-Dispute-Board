@@ -23,7 +23,7 @@ const client = createClient({
     account: account
 });
 
-// Explicit, stripped down GenLayer ABI definitions
+// Complete, explicit ABI definition mapping to your Python contract methods
 const contractAbi = [
     {
         "name": "file_dispute",
@@ -45,40 +45,51 @@ const contractAbi = [
     }
 ];
 
+// Submits the dispute description into GenVM Storage
 export async function fileDispute(claimText) {
     console.log(`[GenLayer RPC] Filing dispute text to storage...`);
-    
     return await client.writeContract({
         address: CONTRACT_ADDRESS,
         abi: contractAbi,
         functionName: 'file_dispute',
         args: [String(claimText)],
-        // CRITICAL: Hardcoding gas as a BigInt overrides viem's automated eth_estimateGas 
-        // fallback sequence, preventing the execution revert loop.
-        gas: 2000000n 
+        gas: 2000000n // Hardcoded gas override prevents automated eth_estimateGas reverts
     });
 }
 
+// Triggers the validator nodes to execute the Equivalence Principle AI jury
 export async function resolveDispute(disputeId) {
     console.log(`[GenLayer RPC] Invoking resolve_dispute for ID: ${disputeId}...`);
-    
     return await client.writeContract({
         address: CONTRACT_ADDRESS,
         abi: contractAbi,
         functionName: 'resolve_dispute',
         args: [BigInt(disputeId)],
-        gas: 4000000n 
+        gas: 4000000n
     });
 }
 
+// Reads the TreeMap state string and parses it back safely into a JavaScript Object
 export async function getDisputeStatus(disputeId) {
     console.log(`[GenLayer RPC] Reading status for ID: ${disputeId}...`);
     
-    const rawJsonString = await client.readContract({
+    const rawResult = await client.readContract({
         address: CONTRACT_ADDRESS,
         abi: contractAbi,
         functionName: 'get_status',
         args: [BigInt(disputeId)]
     });
-    return JSON.parse(rawJsonString);
+
+    // If GenLayer already returned a structured object layout, forward it directly
+    if (typeof rawResult === 'object' && rawResult !== null) {
+        return rawResult;
+    }
+
+    try {
+        // Attempt parsing only if it's a valid JSON-formatted string string
+        return JSON.parse(rawResult);
+    } catch (e) {
+        // Fallback: If it's a standard unformatted raw string, wrap it so the browser reads it cleanly
+        return { status: rawResult };
+    }
 }
